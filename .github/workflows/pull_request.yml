@@ -1,0 +1,60 @@
+name: Pull Request
+on: 
+  pull_request:
+jobs:
+  pr-publish:
+    if: github.head_ref == 'deployment-pr' || github.head_ref == 'dispatch-pr' 
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: Dump Environment variables 
+        run: |
+          git rev-parse HEAD
+          printenv
+      - name: Client setup
+        run: | 
+          curl -fsSL https://testspace-client.s3.amazonaws.com/testspace-linux-dev.tgz | sudo tar -zxvf- -C /usr/local/bin
+          testspace config url s2testorg.stridespace.com
+      - name: Push result to Testspace server
+        run: |
+          testspace "[${{ github.workflow }}]results.xml"
+        if: always()
+  trigger-deployment:
+    needs: pr-publish
+    if: ${{ github.head_ref == 'deployment-pr' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Deployment
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{secrets.GH_S2_TESTSPACE_TEST}} # GITHUB_TOKEN does not work 
+          script: |
+            github.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref:  "refs/heads/${{ github.head_ref }}",
+              auto_merge: false, // need to have it disabled, otherwise it auto merges "master" into the branch and coomits to the remote repo
+              required_contexts: [],  // for some reason this empty field is required
+              payload: {context_ref: context.ref }
+            })
+  trigger-dispatch:
+    needs: pr-publish
+    if: ${{ github.head_ref == 'dispatch-pr' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dispatch
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{secrets.GH_S2_TESTSPACE_TEST}} # GITHUB_TOKEN does not work 
+          script: |
+            github.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "dispatch.yml",
+              ref:  "refs/heads/${{ github.head_ref }}",
+              inputs: {context_ref: context.ref }
+            })

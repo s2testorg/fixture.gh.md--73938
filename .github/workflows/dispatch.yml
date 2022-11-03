@@ -1,0 +1,31 @@
+name: Dispatch
+on: 
+  workflow_dispatch:
+    inputs:
+      context_ref:
+jobs:
+  dispatch-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.context_ref }}
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: Dump Environment variables 
+        run: |
+          ACTUAL_SHA=`git rev-parse HEAD`
+          git name-rev --name-only $ACTUAL_SHA
+          git name-rev --no-undefined --name-only --refs=remotes/* $ACTUAL_SHA
+          echo $ACTUAL_SHA
+          printenv
+      - name: Client setup
+        run: | 
+          curl -fsSL https://testspace-client.s3.amazonaws.com/testspace-linux-dev.tgz | sudo tar -zxvf- -C /usr/local/bin
+          testspace config url s2testorg.stridespace.com
+      - name: Push result to Testspace server
+        run: |
+          testspace "[${{ github.workflow }}]results.xml"
+        if: always()

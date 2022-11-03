@@ -1,0 +1,27 @@
+name: Push Two
+on: 
+  push:
+    branches:
+      - github.workflow
+  workflow_dispatch:
+jobs:
+  push-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: Dump Environment variables 
+        run: |
+          git rev-parse HEAD
+          printenv
+      - name: Client setup
+        run: | 
+          curl -fsSL https://testspace-client.s3.amazonaws.com/testspace-linux-dev.tgz | sudo tar -zxvf- -C /usr/local/bin
+          testspace config url s2testorg.stridespace.com
+      - name: Push result to Testspace server
+        run: |
+          testspace "[${{ github.workflow }}]results.xml"
+        if: always()
